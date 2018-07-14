@@ -1,0 +1,173 @@
+---
+title: "Eficácia da Análise de Sentimento baseada em Léxicos"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(here)
+library(modelr)
+library(broom)
+library(GGally)
+theme_set(theme_bw())
+```
+### Motivação
+
+Segundo os levantamentos do Instituto Brasileiro de Geografia e Estatística (IBGE), o Brasil possui atualmente mais de 207 milhões de habitantes. O Governo Federal tem dificuldades para atender reclamações dos cidadãos, seja por conta do alto número de habitantes por município, como também por consequência dos inúmeros problemas de infraestrutura que o país possui. 
+  
+   Diante desta situação, o Governo Federal precisa estimar o nível de insatisfação das reclamações para que possa gerenciar melhor as ações que devem ser tomadas para sanar os problemas. Entretanto, realizar estas estimativas não é uma tarefa fácil: é necessário um método aplicável para análise de sentimento nas reclamações.
+  
+   Um dos métodos mais utilizados neste ramo é a análise de sentimento baseada em léxicos, que consiste no uso de um dicionário de palavras e frases que, ao invés de possuir significado, possui uma qualificação numérica. Este tipo de análise é considerada muito eficiente, seja na utilização de recursos computacionais, seja em capacidade de predição. 
+  
+   Sendo assim, queremos nessa pesquisa quantificar a eficácia dos métodos de análise de sentimento baseados em léxicos para estimar o nível de insatisfação das reclamações que o Governo Federal recebe através do ReclameAqui, um portal de reclamações de âmbito geral.
+
+### Perguntas de pesquisa
+* Quão eficazes são os métodos de análise de sentimento baseados em léxicos para estimar o nível de insatisfação de reclamações recebidas pelo ReclameAqui do governo federal?
+
+* Há relação entre o comprimento de cada reclamação e o nível de insatisfação atribuído?
+
+* Considerando os órgãos e o erro, qual dos dois léxicos (op30 ou sent) mostrou-se mais eficiente ao tentar estimar o nível de insatisfação?
+
+
+
+## Os dados
+
+Os dados são compostos por uma amostra das reclamações feitas por usuários dos órgãos federais, em nosso caso, são especificamente INSS e ANAC. Essas reclamações foram submetidas a plataforma ReclameAqui. A partir dessa amostra, foi feito avaliações quanto ao nível de insatisfação da pessoa com o órgão, sendo 320 avaliações feitas por 60 alunos do curso de Ciência da Computação da Universidade Federal de Campina Grande.
+```{r carrega}
+
+reclamacoes = read_csv(here("data/3-avaliacao-humana/reclamacoes-avaliadas-20180703.csv"))
+sentimentos = read_csv(here("data/5-sentimentos/sentimento.csv"))
+
+reclamacoes = reclamacoes %>% mutate(comprimento_reclamacao = str_length(reclamacao))
+```
+
+`reclamacoes_l` tem um formato long em vez de wide (explicado [aqui](https://sejdemyr.github.io/r-tutorials/basics/wide-and-long/)).
+
+
+### Reunindo os dados em uma única tabela
+Em reclamações temos os dados referentes as reclamações dos usuários. Em sentimentos está contido as avaliações feitas pelas ferramentas op30 e sent, assim como o a classificação manual.
+
+```{r junta}
+reclamacoes = reclamacoes %>% 
+    left_join(sentimentos, by = "id")
+
+reclamacoes_l = reclamacoes %>%  
+    select(-palavras_op30, -palavras_sent, -grupo_avaliando) %>% 
+    gather(key = "lexico", 
+           value = "polaridade", 
+           sentimento_op30, sentimento_sent)
+
+reclamacoes_l %>% View()
+
+```
+O valor retornado pelas abordagens de análise lexica usadas, tem como retorno um valor difente da escala usada para calssificar o grau de instistação, a qual está no intervalo de 0 a 5. Dessa forma, foi necessário usar uma função para poder normalizar esses dados convertendo para a escala usada.
+
+
+
+```{r}
+ #Faça você mesmo. Crie a variável polaridade_normalizada
+ reclamacoes_l = reclamacoes_l %>% 
+     group_by(lexico) %>% 
+     mutate(polaridade_normalizada = round((polaridade - min(polaridade)) / max(polaridade - min(polaridade)) * (1 - 5) + 5))
+```
+
+Calcula o erro (SSE) por reclamação
+
+```{r}
+reclamacoes_l = reclamacoes_l %>% 
+    mutate(erro = (insatisfacao - polaridade_normalizada)**2)
+```
+
+###Como avaliar a eficácia dos métodos?  
+Uma medida interessante da eficiência desses métodos é calcular a soma dos erros ao quadrado (SSE) considerando o que o método definiu como a polaridade_normalizada e o que a avaliação humana definiu como a insatisfação.
+
+```{r}
+reclamacoes %>% 
+    ggplot(aes(x = sentimento_op30, y = sentimento_sent)) + 
+    geom_abline(slope = 1, intercept = 0, color = "green") + 
+    geom_count(alpha = .7, color = "red") 
+```
+
+```{r}
+reclamacoes_l %>% 
+    ggplot(aes(x = insatisfacao, y = polaridade_normalizada, group = insatisfacao)) + 
+    geom_abline(slope = 1, intercept = 0, color = "grey") + 
+    geom_jitter(alpha = .7)  + 
+    facet_wrap(~ lexico)
+
+reclamacoes_l %>% 
+    ggplot(aes(x = insatisfacao, y = erro, group = insatisfacao)) + 
+    geom_jitter(alpha = .5)  +
+    # geom_boxplot() + 
+    facet_wrap(~ lexico)
+```
+
+## Há relação entre o número de palavras e o nível de insatisfação atribuído?
+O número de palavras em uma reclamação pode estar relacionado com um nível de insatisfação mais ou menos elevado. A análise de regressão feita nas duas variáveis comprovou uma relação entre ambas. Segundo nossa análise, concluímos que quanto maior o nível de insatisfação das reclamações, maior é a tendência do usuário a usar um maior número de palavras para expressar sua insatisfação diante do problema. Afinal, as reclamações com nível 4 ou 5 de insatisfação registraram os maiores casos de números de palavras usadas em cada reclamação.
+
+
+
+```{r}
+reclamacoes_l %>% 
+  ggplot(aes(x = insatisfacao, y = palavras)) + 
+  geom_jitter(width = .1) 
+
+```
+
+
+
+
+
+###Considerando os órgãos e o erro, qual dos dois léxicos (sentimento_op30 ou sentimento_sent) mostrou-se mais eficiente ao tentar estimar o nível de insatisfação?
+Os dois léxicos avaliados estimam o nível de insatisfação de maneiras diferentes. Em nossa análise, ficou indicado que o léxico sentimento_op30 possui uma menor estimativa de erros considerando os órgãos avaliados. Já o órgão ANAC possui uma maior estimativa de erros que o INSS. 
+
+Uma regressão múltipla foi utilizada para avaliar se o léxico está associado ao erro na estimativa de nível de insatisfação da reclamação. Os resultados indicaram que um modelo com preditores no formato Erro = X1*léxico não explicam muito com relação à variância da variável de resposta (R² =  0.002624).
+Sendo assim, não podemos afirmar se um léxico é melhor que o outro considerando as variáveis erro e órgão.
+
+
+
+```{r}
+#Cria variável dummy para preditor categórico
+reclamacoes_l = reclamacoes_l %>% mutate(lexico.dummy = if_else(lexico == "sentimento_sent", 1, 0))
+reclamacoes_l = reclamacoes_l %>% mutate(orgao.dummy = if_else(orgao == "anac-agencia-nacional-de-aviacao-civil", 1, 0))
+
+mod <- lm(formula=erro~lexico.dummy + orgao.dummy, data=reclamacoes_l)
+
+# sintaxe base R:
+summary(mod)
+confint(mod)
+
+# broom, que acho mais recomendável: 
+tidy(mod, conf.int = TRUE)
+glance(mod) # depois falaremos desse
+
+reclamacoes_l %>% 
+  add_predictions(model = mod) %>% # add o que o modelo estima p cada hs_grad
+  ggplot(mapping = aes(x = erro, y = lexico)) + 
+  geom_point(alpha = 0.4, size = .5) + 
+  geom_line(aes(y = pred), colour = "red")  + 
+  geom_abline(intercept = 69, slope = -.65, color  = "darkblue") 
+```
+
+
+
+**Dica** - o texto de resultado que queremos produzir é algo como: 
+
+Regressão múltipla foi utilizada para analisar se VarIndep1 e VarIndep2 tem uma associação significativa com o erro na estimativa de instatisfação da reclemação. Os resultados da regressão indicam que um modelo com os 2 preditores no formato Erro = XXX.VarIndep1 + YYY.VarIndep2 explicam XX,XX% da variância da variável de resposta (R2 = XX,XX). VarIndep1, medida como/em [unidade ou o que é o 0 e o que é 1] tem uma relação significativa com o erro (b = [yy,yy;  zz,zz], IC com 95%), assim como VarIndep2 medida como [unidade ou o que é o 0 e o que é 1] (b = [yy,yy;  zz,zz], IC com 95%). O aumento de 1 unidade de VarIndep1 produz uma mudança de...
+
+```{r}
+reclamacoes_l %>% 
+  select(insatisfacao, polaridade_normalizada, lexico, orgao, erro) %>% 
+  ggpairs()
+```
+
+```{r}
+reclamacoes_l %>% 
+  ggplot(aes(x = insatisfacao, y = polaridade_normalizada)) + 
+  #geom_boxplot() + 
+  geom_jitter(width = .1) 
+
+```
+
+
+```

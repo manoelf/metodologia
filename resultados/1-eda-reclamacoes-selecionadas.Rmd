@@ -1,0 +1,93 @@
+---
+title: "Há concordância na avaliação da insatisfação?"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r warning=FALSE,message=FALSE}
+library(tidyverse)
+library(here)
+```
+
+Escrever introdução aqui
+
+## Os dados
+
+```{r}
+reclamacoes_raw = read_csv(here("data/1-reclamacoes-selecionadas/20180605-reclamacoes-selecionadas.csv"), 
+                          col_types = "cccccii")
+
+reclamacoes = reclamacoes_raw %>% 
+    mutate(comprimento = str_length(reclamacao), 
+           palavras_caps = str_count(reclamacao, "\\b[A-Z]{3,}\\b"))
+
+glimpse(reclamacoes)
+
+# avaliacoes_raw = read_csv(here("data/2-avaliacao-humana/avaliacao.csv"), 
+#                           col_types = "ccd")
+# 
+# avaliacoes = avaliacoes_raw %>% 
+#     select(avaliador = `Sua matrícula`, 
+#            id_reclamacao = `Id da reclamação`, 
+#            insatisfacao = `Insatisfação`)
+# 
+# glimpse(avaliacoes)
+```
+
+```{r}
+reclamacoes %>% 
+    ggplot(mapping = aes(x = palavras_caps)) +  
+    geom_histogram(binwidth = 3, 
+                   boundary = 0, 
+                   color = "salmon", 
+                   fill = "white") + 
+    facet_wrap(~ orgao) + 
+    labs(x = "Palavras EM CAPS", 
+         y = "Quantas")
+```
+
+
+
+## Quantos avaliadores há por reclamação?
+
+```{r}
+avaliacoes %>% 
+    group_by(id_reclamacao) %>% 
+    count() %>% 
+    ggplot(aes("Reclamações", n)) + 
+    geom_jitter(width = .05, alpha = .7) + 
+    labs(x = "", 
+         y = "Número de avaliadores")
+```
+
+```{r}
+avaliacoes %>% 
+    group_by(id_reclamacao) %>% 
+    count() %>%
+    ungroup() %>% 
+    summarise(media_avaliadores = mean(n), 
+              mediana_avaliadores = median(n))
+```
+
+## Que avaliação eles dão?
+
+```{r}
+avaliacoes %>%
+    ggplot(aes(x = reorder(id_reclamacao, insatisfacao, fun = median),
+               y = insatisfacao)) +
+    geom_boxplot(outlier.colour = NA) + 
+    geom_jitter(width = .2, alpha = .5, height = 0.05, color = "salmon") + 
+    labs(x = "Id da reclamação")
+    
+```
+
+
+```{r}
+avaliacoes %>% 
+    group_by(id_reclamacao) %>% 
+    ggplot(aes(reorder(id_reclamacao, insatisfacao,FUN = median), insatisfacao)) + 
+    geom_count() + 
+    labs(x = "Id da reclamação")
+```
+

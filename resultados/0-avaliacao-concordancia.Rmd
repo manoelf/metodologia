@@ -1,0 +1,87 @@
+---
+title: "Há concordância na avaliação da insatisfação?"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r warning=FALSE,message=FALSE}
+library(tidyverse)
+library(here)
+```
+
+Para esse experimento:
+
+1. 40 alunos leram juntos um conjunto um conjunto de 5 reclamações e produziram juntos uma estimativa de insatisfaçõa de 1 a 5, salva em `avaliacoes-de-referencia.csv` (e colocadas [nesse link para facilitar a leitura](https://docs.google.com/spreadsheets/d/1wxowXj1g2QIZZynPHr-dY4zU92Tm4Ca9Y0WIYKDtpoQ/edit?usp=sharing))
+2. Os mesmos alunos foram convidados a avaliar as reclamações em `amostra-10-de-reclamacoes.csv`. `experimento-de-avaliacao.csv` contém o resultado das avaliações dos participantes. 
+
+Abaixo avaliamos se eles concordaram na estimativa que deram da insatisfação.
+
+## Os dados
+
+Dados coletados na sala. 
+
+```{r}
+avaliacoes_raw = read_csv(here("data/2-avaliacao-humana-preliminar/experimento-de-avaliacao.csv"), 
+                          col_types = "ccd")
+
+avaliacoes = avaliacoes_raw %>% 
+    select(avaliador = `Sua matrícula`, 
+           id_reclamacao = `Id da reclamação`, 
+           insatisfacao = `Insatisfação`)
+
+glimpse(avaliacoes)
+```
+
+## Limpeza
+
+Ignoramos avaliações das 5 reclamações usadas para calibrar as estimativas.
+
+```{r}
+avaliacoes = avaliacoes %>% 
+    filter(!(id_reclamacao %in% 1:5 ))
+```
+
+
+## Quantos avaliadores há por reclamação?
+
+```{r}
+avaliacoes %>% 
+    group_by(id_reclamacao) %>% 
+    count() %>% 
+    ggplot(aes("Reclamações", n)) + 
+    geom_jitter(width = .05, alpha = .7) + 
+    labs(x = "", 
+         y = "Número de avaliadores")
+```
+
+```{r}
+avaliacoes %>% 
+    group_by(id_reclamacao) %>% 
+    count() %>%
+    ungroup() %>% 
+    summarise(media_avaliadores = mean(n), 
+              mediana_avaliadores = median(n))
+```
+
+## Que avaliação eles dão?
+
+```{r}
+avaliacoes %>%
+    ggplot(aes(x = reorder(id_reclamacao, insatisfacao, fun = median),
+               y = insatisfacao)) +
+    geom_boxplot(outlier.colour = NA) + 
+    geom_jitter(width = .2, alpha = .5, height = 0.05, color = "salmon") + 
+    labs(x = "Id da reclamação")
+    
+```
+
+
+```{r}
+avaliacoes %>% 
+    group_by(id_reclamacao) %>% 
+    ggplot(aes(reorder(id_reclamacao, insatisfacao,FUN = median), insatisfacao)) + 
+    geom_count() + 
+    labs(x = "Id da reclamação")
+```
+

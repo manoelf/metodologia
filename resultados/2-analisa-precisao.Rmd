@@ -1,0 +1,101 @@
+---
+title: "Análise da precisão"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(here)
+library(modelr)
+library(broom)
+
+theme_set(theme_bw())
+```
+
+## Os dados
+
+```{r carrega}
+reclamacoes_raw = read_csv(here("data/reclamacoes-raw/reclamacoes-raw.csv"))
+avaliacoes_raw = read_csv(here("data/avaliacoes/avaliacoes-20180222.csv"))
+sentimentos = read_csv(here("data/sentimentos/sentimento.csv"))
+
+reclamacoes_raw = reclamacoes_raw %>% 
+    mutate(id = 1:n(), 
+           comprimento_reclamacao = str_length(reclamacao), 
+           nome_orgao = str_split(link, "/") %>% map_chr(~ .[[5]]))
+```
+
+`reclamacoes_l` tem um formato long em vez de wide (explicado [aqui](https://sejdemyr.github.io/r-tutorials/basics/wide-and-long/)).
+
+```{r junta}
+avaliacoes = avaliacoes_raw %>% 
+    group_by(id_reclamação) %>% 
+    summarise(insatisfação = median(insatisfação), 
+              avaliadores = n())
+
+reclamacoes = reclamacoes_raw %>% 
+    inner_join(avaliacoes, by = c("id" = "id_reclamação")) %>% 
+    left_join(sentimentos, by = "id")
+
+reclamacoes_l = reclamacoes %>%  
+    select(-palavras_op30, -palavras_sent) %>% 
+    gather(key = "lexico", 
+           value = "polaridade", 
+           sentimento_op30, sentimento_sent)
+
+```
+
+Converte polaridades para escala 0-5
+
+```{r}
+# Faça você mesmo. Crie a variável polaridade_normalizada
+# reclamacoes_l = reclamacoes_l %>% 
+#     group_by(lexico) %>% 
+#     mutate(polaridade_normalizada = ALGOAQUI)
+```
+
+Calcula o erro por reclamação
+
+```{r}
+reclamacoes_l = reclamacoes_l %>% 
+    mutate(erro = (insatisfação - polaridade_normalizada)**2)
+```
+
+
+## EDA
+
+Inicial. Faça os gráficos a mais que achar necessário para entender os dados que temos de resultado.
+
+```{r}
+reclamacoes %>% 
+    ggplot(aes(x = sentimento_op30, y = sentimento_sent)) + 
+    geom_abline(slope = 1, intercept = 0, color = "grey") + 
+    geom_count(alpha = .7) 
+```
+
+```{r}
+reclamacoes_l %>% 
+    ggplot(aes(x = insatisfação, y = polaridade_normalizada, group = insatisfação)) + 
+    geom_jitter(alpha = .7)  + 
+    facet_wrap(~ lexico)
+
+reclamacoes_l %>% 
+    ggplot(aes(x = insatisfação, y = erro, group = insatisfação)) + 
+    geom_jitter(alpha = .5)  +
+    # geom_boxplo() + 
+    facet_wrap(~ lexico)
+```
+
+
+## Há relação entre o léxico e a precisão/erro?
+
+Agora um modelo para responder sua pergunta.
+
+```{r}
+
+```
+
+**Dica** - o texto de resultado que queremos produzir é algo como: 
+
+Regressão múltipla foi utilizada para analisar se VarIndep1 e VarIndep2 tem uma associação significativa com o erro na estimativa de instatisfação da reclemação. Os resultados da regressão indicam que um modelo com os 2 preditores no formato Erro = XXX.VarIndep1 + YYY.VarIndep2 explicam XX,XX% da variância da variável de resposta (R2 = XX,XX). VarIndep1, medida como/em [unidade ou o que é o 0 e o que é 1] tem uma relação significativa com o erro (b = [yy,yy;  zz,zz], IC com 95%), assim como VarIndep2 medida como [unidade ou o que é o 0 e o que é 1] (b = [yy,yy;  zz,zz], IC com 95%). O aumento de 1 unidade de VarIndep1 produz uma mudança de...
+
